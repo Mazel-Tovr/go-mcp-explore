@@ -3,21 +3,25 @@ package main
 import (
 	"context"
 	"fmt"
+	"go-mcp/internal/tool"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
 func main() {
-	// Create a new MCP server
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// Create a new MCP mcp-server
 	s := server.NewMCPServer(
 		"Demo 🚀",
 		"1.0.0",
-		server.WithToolCapabilities(false),
+		server.WithToolCapabilities(true),
 	)
 
 	// Add hello_world tool with enhanced description
-	tool := mcp.NewTool("hello_world",
+	helloWorldTool := mcp.NewTool("hello_world",
 		mcp.WithDescription("Use this tool to greet a person by name. Always use this when user asks to say hello or greet someone."),
 		mcp.WithString("name",
 			mcp.Required(),
@@ -26,33 +30,37 @@ func main() {
 	)
 
 	// Add calculator tool with enhanced description and parameter details
-	calculatorTool := mcp.NewTool("calculate",
-		mcp.WithDescription(`Use this tool for any mathematical calculations. 
-Available operations: addition (+), subtraction (-), multiplication (*), division (/).
-Always use this tool when you need to perform any arithmetic operations or solve math problems.`),
-		mcp.WithString("operation",
-			mcp.Required(),
-			mcp.Description(`The arithmetic operation to perform. 
-Must be one of: 'add' (for +), 'subtract' (for -), 'multiply' (for *), 'divide' (for /)`),
-			mcp.Enum("add", "subtract", "multiply", "divide"),
-		),
-		mcp.WithNumber("x",
-			mcp.Required(),
-			mcp.Description("The first number in the operation. Can be integer or decimal."),
-		),
-		mcp.WithNumber("y",
-			mcp.Required(),
-			mcp.Description("The second number in the operation. Can be integer or decimal."),
-		),
-	)
+	//	calculatorTool := mcp.NewTool("calculate",
+	//		mcp.WithDescription(`Use this tool for any mathematical calculations.
+	//Available operations: addition (+), subtraction (-), multiplication (*), division (/).
+	//Always use this tool when you need to perform any arithmetic operations or solve math problems.`),
+	//		mcp.WithString("operation",
+	//			mcp.Required(),
+	//			mcp.Description(`The arithmetic operation to perform.
+	//Must be one of: 'add' (for +), 'subtract' (for -), 'multiply' (for *), 'divide' (for /)`),
+	//			mcp.Enum("add", "subtract", "multiply", "divide"),
+	//		),
+	//		mcp.WithNumber("x",
+	//			mcp.Required(),
+	//			mcp.Description("The first number in the operation. Can be integer or decimal."),
+	//		),
+	//		mcp.WithNumber("y",
+	//			mcp.Required(),
+	//			mcp.Description("The second number in the operation. Can be integer or decimal."),
+	//		),
+	//	)
 
 	// Add tool handlers
-	s.AddTool(tool, helloHandler)
-	s.AddTool(calculatorTool, calculate)
-
+	s.AddTool(helloWorldTool, helloHandler)
+	//s.AddTool(calculatorTool, calculate)
 	httpServer := server.NewStreamableHTTPServer(s)
 
-	// Start the server
+	discoveryService := tool.NewDiscoveryService("http://localhost:9090/endpoints", 10*time.Second)
+	_ = tool.NewMonitor(s, discoveryService)
+	go discoveryService.Start(ctx)
+	//monitor.Start(ctx)
+	// Start the mcp-server
+	fmt.Println("🚀 Server started on port 8080")
 	if err := httpServer.Start(":8080"); err != nil {
 		fmt.Printf("Server error: %v\n", err)
 	}

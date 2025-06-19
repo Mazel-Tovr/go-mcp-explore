@@ -1,0 +1,49 @@
+basePath: /
+definitions:
+  main.calculateInput:
+    properties:
+      operation:
+        type: string
+      x:
+        type: number
+      "y":
+        type: number
+    type: object
+host: localhost:9090
+info:
+  contact: {}
+  description: Простой калькулятор с операциями add, subtract, multiply, divide.
+  title: Calculator API
+  version: "1.0"
+paths:
+  /calculate:
+    post:
+      consumes:
+      - application/json
+      description: Выполняет сложение, вычитание, умножение или деление двух чисел
+      parameters:
+      - description: Параметры запроса
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.calculateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: number
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Выполнить арифметическую операцию
+      tags:
+      - calculator
+swagger: "2.0"

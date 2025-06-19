@@ -1,0 +1,3 @@
+{
+  "tool_api_list": ["http://localhost:9090/swagger/doc.json"]
+}
