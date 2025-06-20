@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"go-mcp/internal/agent"
@@ -42,7 +43,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	_ = mcpClient.Start(ctx)
 
+	// Вычисли значения выражения 3 + 8 использую tool
 	// Обработчик сигналов для завершения работы
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt)
@@ -53,6 +56,7 @@ func main() {
 		os.Exit(0)
 	}()
 
+	reader := bufio.NewReader(os.Stdin)
 	// Основной цикл интерактивного диалога
 	for {
 		select {
@@ -60,8 +64,9 @@ func main() {
 			return
 		default:
 			fmt.Print("\nВведите ваш запрос (или 'exit' для выхода): ")
-			var userInput string
-			if _, err := fmt.Scanln(&userInput); err != nil {
+			// Вычисли значения выражения 3 + 8 использую tool
+			userInput, err := reader.ReadString('\n')
+			if err != nil {
 				log.Printf("Ошибка ввода: %v", err)
 				continue
 			}
@@ -74,7 +79,7 @@ func main() {
 			// Выполняем запрос через агента
 			if err := aiAgent.ExecuteQuery(userInput); err != nil {
 				fmt.Printf("Ошибка выполнения запроса: %v", err)
-				return
+				continue
 			}
 		}
 	}
@@ -92,13 +97,13 @@ func initMCPClient(ctx context.Context, c *client.Client) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	if err := c.Start(ctx); err != nil {
-		return fmt.Errorf("ошибка запуска клиента: %v", err)
-	}
-
 	c.OnNotification(func(n mcp.JSONRPCNotification) {
 		log.Printf("Уведомление: %s", n.Method)
 	})
+
+	if err := c.Start(ctx); err != nil {
+		return fmt.Errorf("ошибка запуска клиента: %v", err)
+	}
 
 	initRequest := mcp.InitializeRequest{
 		Params: mcp.InitializeParams{
@@ -113,6 +118,7 @@ func initMCPClient(ctx context.Context, c *client.Client) error {
 	if _, err := c.Initialize(ctx, initRequest); err != nil {
 		return fmt.Errorf("ошибка инициализации: %v", err)
 	}
+	//c.Subscribe()
 
 	return nil
 }

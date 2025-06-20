@@ -6,6 +6,7 @@ import (
 	"fmt"
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp" // или где у тебя определен mcp.Tool
+	"strings"
 )
 
 // MCToolAdapter оборачивает mcp.Tool и реализует langchaingo/tools.Tool
@@ -25,13 +26,18 @@ func (a *MCToolAdapter) Name() string {
 
 // Description возвращает описание инструмента
 func (a *MCToolAdapter) Description() string {
-	return a.tool.Description
+	marshalJSON, err := a.tool.MarshalJSON()
+	if err != nil {
+		return a.tool.Description
+	}
+	return fmt.Sprintf("tool description in json: %s", string(marshalJSON))
 }
 
 // Call отправляет запрос к MCP и выполняет инструмент
 func (a *MCToolAdapter) Call(ctx context.Context, input string) (string, error) {
 	fmt.Printf("Calling tool %s with input: %s\n", a.tool.Name, input)
 	var params map[string]interface{}
+	input = strings.Split(input, "\n")[0]
 	if err := json.Unmarshal([]byte(input), &params); err != nil {
 		return "", fmt.Errorf("failed to unmarshal input: %v", err)
 	}

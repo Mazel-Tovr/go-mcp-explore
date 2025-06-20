@@ -14,11 +14,11 @@ import (
 	"log"
 )
 
-const systemPrompt = `Ты - ассистент с доступом к инструментам. Строго соблюдай правила:
+const _formatInstructions = `Ты - ассистент с доступом к инструментам. Строго соблюдай правила:
 
-1. Для математических операций ВСЕГДА используй инструмент calculate
-2. Для приветствий ВСЕГДА используй инструмент hello_world
-3. Формат ответа ДОЛЖЕН быть:
+1. Для выполнения задачи используй только доступные инструменты.
+2. Для вызова инструментов используй английский и заданный формат который предлагает инструмент, для ответов на вопрос 
+2. Формат ответа ДОЛЖЕН быть:
 
 Action: имя_инструмента
 Action Input: {"параметр":"значение"}
@@ -31,7 +31,7 @@ Final Answer: текст ответа
 ---
 User: Привет, Анна
 Assistant:
-Action: hello_world
+Action: {название_инструмента}
 Action Input: {"name":"Анна"}
 ---
 User: Сколько будет 5+3?
@@ -49,6 +49,43 @@ var promptTemplate = agents.WithPrompt(prompts.NewPromptTemplate(
 		Запрос: {{.input}}`,
 	[]string{"system_prompt", "today", "input"},
 ))
+
+const promtPrefix = `
+Your are an AI agent which help a user interact with a system.
+Today is {{.today}}.
+Answer the following questions as best you can. 
+You have access to the following tools, witch you can use to access information:
+Tools descriptions is a schema witch can be used to call the tool.
+{{.tool_descriptions}}`
+
+const formatInstructions = `
+We have a 'thought', 'action', 'action input', 'observation', and 'final answer' chain.
+!!You !MUST! interact in conversation only use template [{KEY_WORD}: input text] !!
+For calling the tools you must use this template: "Action:\s*(.+)\s*Action Input:\s(?s)*(.+)"
+List of KEY_WORDS and what are they do: 
+Question - the input question you must answer
+Thought - it's a chain of thoughts you have about the question
+Action - the action to take, should be one of [ {{.tool_names}} ]
+Action Input - the input to the action parameters !MUST! be a key-value for example Action Input: {"name":"Alex"} and no new line with text after
+Observation - is Key Word which contains result form tool
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: I now know the final answer
+Final Answer - after this keyword should be final answer to the original input question,  use when you think you know the final answer.
+
+Example of our dialog:
+User - a user witch asks questions to you
+Assistant - your assistant witch can help user with some tools, you can call tools when it need, use MCP protocol,
+after you print Action and Action Input you should print on new line "Observation:" to get response form tool
+----
+User: Сколько будет 5+3?
+Assistant:
+Action: calculate
+Action Input: {"operation":"add","x":5,"y":3}
+--- dialog end agent analyze and call tools --- 
+Observation: ... (wait for response form tool (we are using MCP protocol))
+...
+Assistant: 'Final Answer: The final answer to the original input question after all thoughts and tool calls'
+`
 
 type Agent struct {
 	c     *client.Client
@@ -68,7 +105,8 @@ func NewAgent(c *client.Client, llm *openai.LLM) (*Agent, error) {
 		llm,
 		agentTools,
 		agents.WithMemory(memory.NewConversationBuffer()),
-		promptTemplate, // Передаем нашу цепочку
+		agents.WithPromptFormatInstructions(formatInstructions),
+		agents.WithPromptPrefix(promtPrefix),
 	)
 	a := &Agent{c: c, llm: llm, agent: agent}
 	c.OnNotification(a.OnEventFromMCPServer)
@@ -110,8 +148,8 @@ func (a *Agent) ExecuteQuery(input string) error {
 
 	// 6. Выполняем запрос через агента
 	actions, finish, err := a.agent.Plan(ctx, []schema.AgentStep{}, map[string]string{
-		"system_prompt": systemPrompt,
-		"input":         input,
+		//"system_prompt": systemPrompt,
+		"input": input,
 	})
 
 	if err != nil {
@@ -142,8 +180,7 @@ func (a *Agent) ExecuteQuery(input string) error {
 			agentSteps := append(agentSteps, schema.AgentStep{Action: action, Observation: result})
 
 			_, finish, err := a.agent.Plan(ctx, agentSteps, map[string]string{
-				"system_prompt": systemPrompt,
-				"input":         input,
+				"input": input,
 			})
 
 			if err != nil {
@@ -173,7 +210,11 @@ func getTools(c *client.Client) ([]tools.Tool, error) {
 
 	var agentTools []tools.Tool
 	for _, tool := range toolsResult.Tools {
-		fmt.Printf("🛠 Зарегистрирован инструмент: %s\n   Описание: %s\n", tool.Name, tool.Description)
+		json, err := tool.MarshalJSON()
+		if err != nil {
+			fmt.Printf("Ошибка сериализации инструмента %s: %v", tool.Name, err)
+		}
+		fmt.Printf("🛠 Зарегистрирован инструмент: %s\n  Описание: %s\n Json схема: %s\n", tool.Name, tool.Description, string(json))
 		agentTools = append(agentTools, NewMCToolAdapter(tool, c))
 	}
 

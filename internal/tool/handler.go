@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -29,7 +30,7 @@ func NewGenericToolHandler(toolSet *mcptool.ToolSet, toolName string) server.Too
 		}
 
 		// Step 3: Build the full URL with path parameters
-		fullURL := op.BaseURL + op.Path
+		fullURL := strings.Replace(op.BaseURL, "https", "http", 1) + op.Path
 
 		// Step 4: Apply path parameters
 		for _, param := range op.Parameters {
@@ -62,11 +63,9 @@ func NewGenericToolHandler(toolSet *mcptool.ToolSet, toolName string) server.Too
 
 		for _, param := range op.Parameters {
 			if param.In == "header" {
-				paramValue, ok := args[param.Name]
-				if !ok {
-					continue
+				for key, value := range args {
+					req.Header.Set(key, fmt.Sprintf("%v", value))
 				}
-				req.Header.Set(param.Name, fmt.Sprintf("%v", paramValue))
 			}
 		}
 
@@ -74,11 +73,9 @@ func NewGenericToolHandler(toolSet *mcptool.ToolSet, toolName string) server.Too
 		bodyParams := make(map[string]interface{})
 		for _, param := range op.Parameters {
 			if param.In == "body" {
-				paramValue, ok := args[param.Name]
-				if !ok {
-					continue
+				for key, value := range args {
+					bodyParams[key] = value
 				}
-				bodyParams[param.Name] = paramValue
 			}
 		}
 
@@ -87,7 +84,7 @@ func NewGenericToolHandler(toolSet *mcptool.ToolSet, toolName string) server.Too
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal request body: %w", err)
 			}
-			req.Body = http.NoBody // Replace with a real Body if needed
+			req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 			req.ContentLength = int64(len(bodyBytes))
 			req.Header.Set("Content-Type", "application/json")
 		}
@@ -126,11 +123,11 @@ func NewGenericToolHandler(toolSet *mcptool.ToolSet, toolName string) server.Too
 			return mcp.NewToolResultError(fmt.Sprintf("request failed with status code %d", resp.StatusCode)), nil
 		}
 
-		var result string
-		if err = json.Unmarshal(respBody, &result); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal response body: %w", err)
-		}
+		//var result string
+		//if err = json.Unmarshal(respBody, &result); err != nil {
+		//	return nil, fmt.Errorf("failed to unmarshal response body: %w", err)
+		//}
 
-		return mcp.NewToolResultText(result), nil
+		return mcp.NewToolResultText(string(respBody)), nil
 	}
 }
